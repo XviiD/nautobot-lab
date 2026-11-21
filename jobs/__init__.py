@@ -9,7 +9,7 @@ from django.db import transaction
 from nautobot.apps.jobs import BooleanVar, Job, register_jobs
 from nautobot.extras.models import Status, Tag
 from nautobot.ipam.models import IPAddress, Namespace, Prefix
-from nautobot_firewall_models.models import AddressObject, AddressObjectGroup
+from nautobot_firewall_models.models import AddressObject, AddressObjectGroup, PolicyRule, ServiceObject
 
 
 SOURCE = Path(__file__).resolve().parents[1] / "data" / "firewall-objects.yaml"
@@ -107,7 +107,61 @@ def sync_inventory(data):
         if desired != set(group.address_objects.values_list("pk", flat=True)):
             group.address_objects.set(desired)
             counts["Group membership updated"] += 1
+    sync_test_rules(objects, data["address_groups"], active, marker, counts)
     return counts
+
+
+def choice(model, field, token):
+    for value, label in model._meta.get_field(field).flatchoices:
+        if token.casefold() in (str(value).casefold(), str(label).casefold()):
+            return value
+    raise ValueError(f"Unsupported {model.__name__}.{field} choice: {token}")
+
+
+def sync_test_rules(objects, group_rows, active, marker, counts):
+    source = SOURCE.with_name("firewall-rules.yaml")
+    if not source.exists():
+        return
+    spec = yaml.safe_load(source.read_text(encoding="utf-8"))
+    groups = {row["name"]: AddressObjectGroup.objects.get(name=row["name"], description=marker).pk
+              for row in group_rows}
+    services = {}
+    for name, row in spec["services"].items():
+        protocol = choice(ServiceObject, "ip_protocol", row["protocol"])
+        port = str(row["port"])
+        service = ensure(ServiceObject, {"name": name}, {
+            "ip_protocol": protocol, "port": port, "description": marker, "status": active
+        }, counts)
+        if service.description != marker or str(service.port) != port or service.ip_protocol != protocol:
+            raise ValueError(f"Service name or definition conflict: {name}")
+        services[name] = service.pk
+
+    seen = set()
+    for row in spec["rules"]:
+        ref = row["id"]
+        if not ref.startswith("LAB-FLOW-") or ref in seen:
+            raise ValueError(f"Invalid or duplicate rule ID: {ref}")
+        seen.add(ref)
+        destinations = {objects[name] for name in row.get("destinations", [])}
+        dest_groups = {groups[name] for name in row.get("destination_groups", [])}
+        if not destinations and not dest_groups:
+            raise ValueError(f"Missing destination: {ref}")
+        fields = {"name": row["name"], "action": choice(PolicyRule, "action", "ALLOW"),
+                  "status": active, "log": True}
+        rule = ensure(PolicyRule, {"request_id": ref}, fields, counts)
+        changed = [key for key, value in fields.items() if getattr(rule, key) != value]
+        if changed:
+            for key in changed:
+                setattr(rule, key, fields[key])
+            rule.validated_save()
+            counts["PolicyRule updated"] += 1
+        desired = {"source_address": {objects[row["source"]]}, "destination_address": destinations,
+                   "destination_address_group": dest_groups, "service": {services[row["service"]]}}
+        for field, member_ids in desired.items():
+            relation = getattr(rule, field)
+            if set(relation.values_list("pk", flat=True)) != member_ids:
+                relation.set(member_ids)
+                counts["PolicyRule relations updated"] += 1
 
 
 class ImportFirewallObjects(Job):

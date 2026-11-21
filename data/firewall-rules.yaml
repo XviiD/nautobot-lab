@@ -1,0 +1,29 @@
+# Alla regel-ID:n är stabila referenser i labbet.
+services:
+  LAB-HTTPS: {protocol: TCP, port: 443}
+  LAB-PostgreSQL: {protocol: TCP, port: 5432}
+
+rules:
+  - id: LAB-FLOW-001
+    name: LAB - Windows till Linux API
+    source: windows-app-prod-01
+    destinations: [linux-api-prod-01]
+    service: LAB-HTTPS
+
+  - id: LAB-FLOW-002
+    name: LAB - Windows till Linux-grupp
+    source: windows-app-prod-02
+    destination_groups: [grp-linux-prod]
+    service: LAB-HTTPS
+
+  - id: LAB-FLOW-003
+    name: LAB - Windows till orderplattform
+    source: windows-app-prod-03
+    destination_groups: [grp-order-prod]
+    service: LAB-HTTPS
+
+  - id: LAB-FLOW-004
+    name: LAB - Linux till databas
+    source: linux-api-prod-01
+    destinations: [dba-db-prod-01]
+    service: LAB-PostgreSQL
