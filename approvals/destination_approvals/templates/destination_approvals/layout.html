@@ -1,0 +1,4 @@
+{% extends "base.html" %}
+{% load static %}
+{% block extra_styles %}{{ block.super }}<link rel="stylesheet" href="{% static 'destination_approvals/review.css' %}">{% endblock %}
+{% block content %}<section class="da">{% block review_content %}{% endblock %}</section>{% endblock %}

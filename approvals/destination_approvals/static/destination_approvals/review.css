@@ -1,0 +1,18 @@
+.da {max-width: 1060px; margin: 1.5rem auto; padding: 0 1rem;}
+.da h1 {font-weight: 650; margin: .4em 0 .7em;}
+.da h2 {font-size: 1.25em; margin: 0 0 .8em;}
+.da header {margin: 1.5em 0;}
+.da small {display: block; opacity: .8; margin-bottom: .25em;}
+.da-scroll {overflow-x: auto;}
+.da-table td, .da-table th {padding: .9em !important; vertical-align: middle !important;}
+.da-table a {font-weight: 600;}
+.da-state {display: inline-block; font-size: .92em; padding: .22em .7em; border-radius: 1em; background: #edf0f3; color: #334155;}
+.da-due {background: #fff0c2; color: #754900;}
+.da-approved {background: #ddf5e8; color: #165b37;}
+.da-denied {background: #ffe1dd; color: #832a20;}
+.da-grid {display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,270px),1fr)); gap: 1em;}
+.da-box {border: 1px solid #8894a366; border-radius: .6em; padding: 1.25em;}
+.da-box ul {padding-left: 1.25em; margin: 0;}
+.da-box li + li {margin-top: .5em;}
+.da-line {margin: 1.5em 0;}
+.da-team {display: flex; gap: 1em; justify-content: space-between; align-items: center; flex-wrap: wrap; padding: .8em 0; border-top: 1px solid #8894a355;}

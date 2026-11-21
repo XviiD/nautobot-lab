@@ -1,16 +1,15 @@
-<a href="{% url 'plugins:destination_approvals:index' %}">Alla synliga labbregler</a>
-<h1>{{ rule.request_id }} · {{ rule.name }}</h1>
-<p>Status: <strong>{{ state }}</strong></p>
-{% for message in messages %}<p>{{ message }}</p>{% endfor %}
-{% if data %}
-<h2>Trafik att granska</h2>
-<p>Källa: {% for obj in data.source %}{{ obj.name }} ({{ obj.address }}) {% endfor %}</p>
-<p>Destination: {% for obj in data.destination %}{{ obj.name }} ({{ obj.address }}, {{ obj.owner }}) {% endfor %}</p>
-<p>Tjänst: {% for svc in data.services %}{{ svc.name }} ({{ svc.protocol }}/{{ svc.port }}) {% endfor %} · {{ data.action }} · Loggning: {{ data.log|yesno:"ja,nej" }}</p>
-{% endif %}
-{% if can_submit %}<form method="post">{% csrf_token %}<button name="action" value="submit">Skicka för godkännande</button></form>{% endif %}
-<h2>Destinationsteam</h2>
-{% for team, decision, can_decide in rows %}
-<p><strong>{{ team }}</strong> {% if decision %}{{ decision.action }} · {{ decision.by }} · {{ decision.at }}{% endif %}</p>
-{% if can_decide %}<form method="post">{% csrf_token %}<input type="hidden" name="review" value="{{ review.pk }}"><input type="hidden" name="team" value="{{ team }}"><button name="action" value="approve">Godkänn för {{ team }}</button> <button name="action" value="deny">Avslå</button></form>{% endif %}
-{% endfor %}
+{% extends "destination_approvals/layout.html" %}
+{% block title %}{{ rule.request_id }} · Godkännande{% endblock %}
+{% block review_content %}
+<a href="{% url 'plugins:destination_approvals:index' %}">← Mina godkännanden</a>
+<header><small>{{ rule.request_id }}</small><h1>{{ rule.name }}</h1><span class="da-state {% if waiting %}da-due{% else %}da-{{ state }}{% endif %}">{{ label }}</span></header>
+<div class="da-grid"><section class="da-box"><h2>Källa</h2><ul>{% for obj in data.source %}<li>{{ obj.name }} <code>{{ obj.address }}</code></li>{% endfor %}</ul></section>
+<section class="da-box"><h2>Destination</h2><ul>{% for obj in data.destination %}<li>{{ obj.name }} <code>{{ obj.address }}</code><small>{{ obj.owner }}</small></li>{% endfor %}</ul></section></div>
+<p class="da-line">{% for svc in data.services %}<strong>{{ svc.name }}</strong> ({{ svc.protocol }}/{{ svc.port }}) {% endfor %} · {{ data.action }} · Loggning {{ data.log|yesno:"på,av" }}</p>
+<h2>Teamens beslut</h2>
+{% for team, decision, can_decide in rows %}<div class="da-team"><strong>{{ team }}</strong>
+{% if decision %}<span>{% if decision.action == 'approve' %}Godkänt{% else %}Avslaget{% endif %} av {{ decision.by }} · {{ decision.at }}</span>
+{% elif can_decide %}<form method="post">{% csrf_token %}<input type="hidden" name="review" value="{{ review.pk }}"><input type="hidden" name="team" value="{{ team }}"><button class="btn btn-primary" name="action" value="approve">Godkänn</button> <button class="btn btn-danger" name="action" value="deny">Avslå</button></form>
+{% elif state == 'pending' %}<span>Väntar på beslut</span>{% else %}<span>Inget beslut</span>{% endif %}</div>{% endfor %}
+{% if can_submit %}<form class="da-line" method="post">{% csrf_token %}<button class="btn btn-primary" name="action" value="submit">Skicka för godkännande</button></form>{% endif %}
+{% endblock %}

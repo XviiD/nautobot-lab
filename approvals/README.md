@@ -1,6 +1,6 @@
 # Destination Approvals
 
-Nautobot-app för aktivt godkännande av labbets trafikbeställningar. En användare med View på en LAB-FLOW-regel kan skicka in den. Ett beslut krävs per unikt destinationsteam. Medlemskap i godkännargruppen och läsåtkomst till regeln kontrolleras på servern för varje beslut.
+Nautobot-app för aktivt godkännande av labbets trafikbeställningar. Mina godkännanden visar giltiga LAB-FLOW-regler för användarens destinationsteam. Läsbehörighet till regeln och medlemskap i en godkännargrupp krävs även vid direktlänk och inskick. Ett beslut krävs per unikt destinationsteam. Medlemskap i godkännargruppen och läsåtkomst till regeln kontrolleras på servern för varje beslut.
 
 ## Installation i Docker
 
@@ -41,4 +41,4 @@ Ge användarna samma begränsade View på Policy Rule som i labbet. Godkännaren
 | LAB-FLOW-003 | Linux och DBA i valfri ordning |
 | LAB-FLOW-004 | DBA |
 
-Testa 003 med separata Windows-, Linux- och DBA-konton. Windows skickar in, Linux godkänner och status är pending. Efter DBA:s godkännande blir status approved. Vid avslag blir den denied och en ny beställning kan skickas. Ändra därefter en destination eller tjänst och ladda om vyn. En ändrad beställning visas som superseded och kräver nya beslut. Grupp- och ägarändringar upptäcks när vyn öppnas eller ett beslut skickas. Godkännandet sparas i appens egen tabell. Labbet gör inga externa anrop och installerar ingen brandväggspolicy.
+Testa 003 med separata Windows-, Linux- och DBA-konton. Windows ser ingen regel i denna kö när Windows endast äger källan. Linux skickar in och godkänner. Status är då pending. Efter DBA:s godkännande blir status approved. Vid avslag blir den denied och en ny beställning kan skickas. Ändra därefter en destination eller tjänst och ladda om vyn. En ändrad beställning visas som superseded och kräver nya beslut. Grupp- och ägarändringar upptäcks när vyn öppnas eller ett beslut skickas. Godkännandet sparas i appens egen tabell. Labbet gör inga externa anrop och installerar ingen brandväggspolicy.
