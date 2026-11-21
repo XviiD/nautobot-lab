@@ -10,3 +10,7 @@ requires-python = ">=3.10"
 
 [tool.setuptools.package-data]
 destination_approvals = ["templates/destination_approvals/*.html", "static/destination_approvals/*.css"]
+
+[tool.setuptools.packages.find]
+include = ["destination_approvals", "destination_approvals.*"]
+namespaces = false
