@@ -62,7 +62,7 @@ def sync_inventory(data):
     tags = {}
     for name in sorted({row["owner_team"] for row in data["objects"]}):
         tag = ensure(Tag, {"name": name}, {}, counts)
-        tag.content_types.add(*ContentType.objects.get_for_models(IPAddress, Prefix).values())
+        tag.content_types.add(*ContentType.objects.get_for_models(IPAddress, Prefix, AddressObject).values())
         tags[name] = tag
 
     objects = {}
@@ -89,12 +89,13 @@ def sync_inventory(data):
             raise ValueError(f"AddressObject name or target conflict: {obj.name}")
 
         owner = tags[row["owner_team"]]
-        existing = set(ipam.tags.filter(name__endswith="-team").values_list("name", flat=True))
-        if existing != {owner.name}:
-            for old_name in existing - {owner.name}:
-                ipam.tags.remove(old_name)
-            ipam.tags.add(owner)
-            counts["IPAM ownership updated"] += 1
+        for target, counter in ((ipam, "IPAM ownership updated"), (obj, "AddressObject ownership updated")):
+            existing = set(target.tags.filter(name__endswith="-team").values_list("name", flat=True))
+            if existing != {owner.name}:
+                for old_name in existing - {owner.name}:
+                    target.tags.remove(old_name)
+                target.tags.add(owner)
+                counts[counter] += 1
         objects[obj.name] = obj.pk
 
     for row in data["address_groups"]:
