@@ -155,8 +155,12 @@ def sync_test_rules(objects, group_rows, active, marker, counts):
                 setattr(rule, key, fields[key])
             rule.validated_save()
             counts["PolicyRule updated"] += 1
-        desired = {"source_address": {objects[row["source"]]}, "destination_address": destinations,
-                   "destination_address_group": dest_groups, "service": {services[row["service"]]}}
+        desired = {
+            "source_addresses": {objects[row["source"]]},
+            "destination_addresses": destinations,
+            "destination_address_groups": dest_groups,
+            "destination_services": {services[row["service"]]},
+        }
         for field, member_ids in desired.items():
             relation = getattr(rule, field)
             if set(relation.values_list("pk", flat=True)) != member_ids:
