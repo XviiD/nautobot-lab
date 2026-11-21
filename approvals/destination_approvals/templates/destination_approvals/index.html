@@ -1,0 +1,2 @@
+<h1>Godkännande av labbregler</h1>
+<ul>{% for rule in rules %}<li><a href="{% url 'plugins:destination_approvals:detail' rule.pk %}">{{ rule.request_id }} · {{ rule.name }}</a></li>{% empty %}<li>Inga synliga labbregler.</li>{% endfor %}</ul>
