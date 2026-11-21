@@ -1,0 +1,16 @@
+<a href="{% url 'plugins:destination_approvals:index' %}">Alla synliga labbregler</a>
+<h1>{{ rule.request_id }} · {{ rule.name }}</h1>
+<p>Status: <strong>{{ state }}</strong></p>
+{% for message in messages %}<p>{{ message }}</p>{% endfor %}
+{% if data %}
+<h2>Trafik att granska</h2>
+<p>Källa: {% for obj in data.source %}{{ obj.name }} ({{ obj.address }}) {% endfor %}</p>
+<p>Destination: {% for obj in data.destination %}{{ obj.name }} ({{ obj.address }}, {{ obj.owner }}) {% endfor %}</p>
+<p>Tjänst: {% for svc in data.services %}{{ svc.name }} ({{ svc.protocol }}/{{ svc.port }}) {% endfor %} · {{ data.action }} · Loggning: {{ data.log|yesno:"ja,nej" }}</p>
+{% endif %}
+{% if can_submit %}<form method="post">{% csrf_token %}<button name="action" value="submit">Skicka för godkännande</button></form>{% endif %}
+<h2>Destinationsteam</h2>
+{% for team, decision, can_decide in rows %}
+<p><strong>{{ team }}</strong> {% if decision %}{{ decision.action }} · {{ decision.by }} · {{ decision.at }}{% endif %}</p>
+{% if can_decide %}<form method="post">{% csrf_token %}<input type="hidden" name="review" value="{{ review.pk }}"><input type="hidden" name="team" value="{{ team }}"><button name="action" value="approve">Godkänn för {{ team }}</button> <button name="action" value="deny">Avslå</button></form>{% endif %}
+{% endfor %}
