@@ -12,6 +12,8 @@ from nautobot.ipam.models import IPAddress, Namespace, Prefix
 from nautobot_firewall_models.models import AddressObject, AddressObjectGroup, PolicyRule, ServiceObject
 
 
+from .spark_firmware import ReadSparkFirmware, SparkFirmwareHook
+
 SOURCE = Path(__file__).resolve().parents[1] / "data" / "firewall-objects.yaml"
 
 
@@ -184,4 +186,4 @@ class ImportFirewallObjects(Job):
                          dict(counts) or "Inga objektändringar")
 
 
-register_jobs(ImportFirewallObjects)
+register_jobs(ImportFirewallObjects, ReadSparkFirmware, SparkFirmwareHook)
