@@ -11,6 +11,7 @@ from nautobot.dcim.models import Device, SoftwareVersion
 from nautobot.extras.models import CustomField, Status
 
 PLATFORM = "Check Point Gaia Embedded"
+SKIP_TLS_FIELD = "spark_skip_tls_verify"
 BUILD_FIELD = "spark_firmware_build"
 INPUT_FIELDS = {"platform", "secrets_group", "primary_ip4", "primary_ip6"}
 
@@ -26,6 +27,8 @@ def read_firmware(device, address):
     with requests.Session() as session:
         session.trust_env = False
         session.verify = os.environ.get("SPARK_CA_BUNDLE") or True
+        if device.cf.get(SKIP_TLS_FIELD) is True:
+            session.verify = False
         session.headers["Content-Type"] = "application/json"
 
         def post(command, payload=None):
