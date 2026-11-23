@@ -38,8 +38,13 @@ def load_inventory(path):
     group_names = set()
     for row in data["address_groups"]:
         members = row["members"]
+        owner = row.get("owner_team")
+        if not members and (not isinstance(owner, str) or not owner.endswith("-team")):
+            raise ValueError(f"Empty group needs an owner_team: {row['name']}")
+        if members and owner is not None:
+            raise ValueError(f"Set ownership on members of populated group: {row['name']}")
         if (row["name"] in group_names or not isinstance(members, list)
-                or not members or len(members) != len(set(members)) or set(members) - names):
+                or len(members) != len(set(members)) or set(members) - names):
             raise ValueError(f"Invalid group or member reference: {row['name']}")
         group_names.add(row["name"])
     return data
@@ -62,9 +67,11 @@ def sync_inventory(data):
     active = Status.objects.get(name="Active")
     marker = f"Git inventory: {ns.name}/firewall-objects.yaml"
     tags = {}
-    for name in sorted({row["owner_team"] for row in data["objects"]}):
+    owners = {row["owner_team"] for row in data["objects"]}
+    owners.update(row["owner_team"] for row in data["address_groups"] if not row["members"])
+    for name in sorted(owners):
         tag = ensure(Tag, {"name": name}, {}, counts)
-        tag.content_types.add(*ContentType.objects.get_for_models(IPAddress, Prefix, AddressObject).values())
+        tag.content_types.add(*ContentType.objects.get_for_models(IPAddress, Prefix, AddressObject, AddressObjectGroup).values())
         tags[name] = tag
 
     objects = {}
@@ -105,6 +112,15 @@ def sync_inventory(data):
                        {"description": marker, "status": active}, counts)
         if group.description != marker:
             raise ValueError(f"AddressObjectGroup name conflict: {group.name}")
+        owner = tags[row["owner_team"]] if not row["members"] else None
+        existing = set(group.tags.filter(name__endswith="-team"))
+        expected = {owner} if owner else set()
+        if (owner or not group.address_objects.exists()) and existing != expected:
+            for tag in existing - expected:
+                group.tags.remove(tag)
+            if owner:
+                group.tags.add(owner)
+            counts["Group ownership updated"] += 1
         desired = {objects[name] for name in row["members"]}
         if desired != set(group.address_objects.values_list("pk", flat=True)):
             group.address_objects.set(desired)
