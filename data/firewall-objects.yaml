@@ -548,3 +548,15 @@ address_groups:
   members:
   - linux-api-prod-01
   - dba-db-prod-01
+- name: ACI-ESG-DB-PROD
+  members: []
+  owner_team: dba-team
+- name: ACI-ESG-APP-PROD
+  members: []
+  owner_team: linux-team
+- name: NSX-SG-WEB-PROD
+  members: []
+  owner_team: windows-team
+- name: NSX-SG-MGMT
+  members: []
+  owner_team: network-team

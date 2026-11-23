@@ -3,8 +3,8 @@
 {% block review_content %}
 <a href="{% url 'plugins:destination_approvals:index' %}">← Mina godkännanden</a>
 <header><small>{{ rule.request_id }}</small><h1>{{ rule.name }}</h1><span class="da-state {% if waiting %}da-due{% else %}da-{{ state }}{% endif %}">{{ label }}</span></header>
-<div class="da-grid"><section class="da-box"><h2>Källa</h2><ul>{% for obj in data.source %}<li>{{ obj.name }} <code>{{ obj.address }}</code></li>{% endfor %}</ul></section>
-<section class="da-box"><h2>Destination</h2><ul>{% for obj in data.destination %}<li>{{ obj.name }} <code>{{ obj.address }}</code><small>{{ obj.owner }}</small></li>{% endfor %}</ul></section></div>
+<div class="da-grid"><section class="da-box"><h2>Källa</h2><ul>{% for obj in data.source %}<li>{{ obj.name }} {% if obj.kind == "external_group" %}<small>Extern grupp</small>{% else %}<code>{{ obj.address }}</code>{% endif %}</li>{% endfor %}</ul></section>
+<section class="da-box"><h2>Destination</h2><ul>{% for obj in data.destination %}<li>{{ obj.name }} {% if obj.kind == "external_group" %}<small>Extern grupp</small>{% else %}<code>{{ obj.address }}</code>{% endif %}<small>{{ obj.owner }}</small></li>{% endfor %}</ul></section></div>
 <p class="da-line">{% for svc in data.services %}<strong>{{ svc.name }}</strong> ({{ svc.protocol }}/{{ svc.port }}) {% endfor %} · {{ data.action }} · Loggning {{ data.log|yesno:"på,av" }}</p>
 <h2>Teamens beslut</h2>
 {% for team, decision, can_decide in rows %}<div class="da-team"><strong>{{ team }}</strong>

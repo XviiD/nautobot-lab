@@ -42,3 +42,16 @@ Ge användarna samma begränsade View på Policy Rule som i labbet. Godkännaren
 | LAB-FLOW-004 | DBA |
 
 Testa 003 med separata Windows-, Linux- och DBA-konton. Windows ser ingen regel i denna kö när Windows endast äger källan. Linux skickar in och godkänner. Status är då pending. Efter DBA:s godkännande blir status approved. Vid avslag blir den denied och en ny beställning kan skickas. Ändra därefter en destination eller tjänst och ladda om vyn. En ändrad beställning visas som superseded och kräver nya beslut. Grupp- och ägarändringar upptäcks när vyn öppnas eller ett beslut skickas. Godkännandet sparas i appens egen tabell. Labbet gör inga externa anrop och installerar ingen brandväggspolicy.
+
+## Simulerade ACI- och NSX-grupper
+
+Grupper med tom medlemslista och exakt en ägartagg representerar externa grupper i labbet. Vanliga grupper använder medlemmarnas ägartaggar. Gruppen kan väljas som Source Address Group eller Destination Address Group. Destinationens ägare godkänner.
+
+För att teamet ska kunna läsa regeln, lägg till följande två alternativ i den befintliga OR-listan för teamets begränsade View på Policy Rule. Exemplet gäller DBA. Behåll de tidigare alternativen för adresser och grupper med medlemmar.
+
+```json
+[
+  {"source_address_groups__tags__name": "dba-team", "source_address_groups__address_objects__isnull": true},
+  {"destination_address_groups__tags__name": "dba-team", "destination_address_groups__address_objects__isnull": true}
+]
+```

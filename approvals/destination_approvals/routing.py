@@ -50,7 +50,13 @@ def snapshot(rule):
         for group in getattr(rule, side + "_address_groups").all():
             members = list(group.address_objects.all())
             if not members:
-                raise ValidationError(f"Tom adressgrupp: {group.name}")
+                owners = list(group.tags.filter(name__endswith="-team").values_list("name", flat=True))
+                if len(owners) != 1:
+                    raise ValidationError(f"{group.name}: en tom grupp kräver exakt en ägartagg.")
+                rows.append({"id": str(group.pk), "group": str(group.pk), "name": group.name,
+                             "kind": "external_group", "owner": owners[0]})
+                if side == "destination":
+                    teams.add(owners[0])
             for obj in members:
                 collect(obj, str(group.pk))
         if not rows:

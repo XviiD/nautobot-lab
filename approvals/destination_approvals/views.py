@@ -20,7 +20,8 @@ def visible(user):
     tags = [tag for tag, group in mapping.items() if group in group_names]
     return PolicyRule.objects.restrict(user, "view").filter(
         Q(destination_addresses__tags__name__in=tags)
-        | Q(destination_address_groups__address_objects__tags__name__in=tags),
+        | Q(destination_address_groups__address_objects__tags__name__in=tags)
+        | Q(destination_address_groups__tags__name__in=tags, destination_address_groups__address_objects__isnull=True),
         request_id__startswith="LAB-FLOW-",
     ).distinct()
 
