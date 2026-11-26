@@ -10,6 +10,7 @@ from nautobot_firewall_models.models import PolicyRule
 from ..models import Review
 from ..routing import snapshot
 from ..status import current_state
+from ..delta import decisions_for
 
 
 class ApprovalStatus(APIView):
@@ -28,11 +29,17 @@ class ApprovalStatus(APIView):
             review = Review.objects.filter(rule_id=pk).first()
             state = current_state(review, data)
             ready = state == "approved"
+            decisions = decisions_for(review, data)
             response = Response({
                 "rule_id": str(pk),
                 "risk_level": data["risk_level"],
                 "state": state,
                 "deployment_ready": ready,
+                "pending_approvals": [key for key in data["approvers"]
+                                      if decisions.get(key, {}).get("action") != "approve"],
+                "retained_approvals": [key for key, decision in decisions.items()
+                                       if key in data["approvers"] and decision.get("action") == "approve"
+                                       and "carried_from_review" in decision],
                 "review_id": review.pk if ready else None,
                 "approved_snapshot": data if ready else None,
             })

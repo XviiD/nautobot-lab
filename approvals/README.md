@@ -1,6 +1,6 @@
 # Destination Approvals
 
-Nautobot-app för aktivt godkännande av labbets trafikbeställningar. Mina godkännanden visar giltiga LAB-FLOW-regler för användarens destinationsteam. Läsbehörighet till regeln och medlemskap i en godkännargrupp krävs även vid direktlänk och inskick. Ett beslut krävs per destinationsteam och ytterligare riskgrupp om den inte redan ingår som destinationsteam. Medlemskap i godkännargruppen och läsåtkomst till regeln kontrolleras på servern för varje beslut.
+Nautobot-app för aktivt godkännande av labbets trafikbeställningar. Mina godkännanden visar giltiga LAB-FLOW-regler för användarens destinationsteam. Läsbehörighet till regeln och medlemskap i en godkännargrupp krävs även vid direktlänk och inskick. Ett beslut krävs per destinationsteam och per separat riskansvar, även om samma grupp har båda rollerna. Medlemskap i godkännargruppen och läsåtkomst till regeln kontrolleras på servern för varje beslut.
 
 ## Installation i Docker
 
@@ -43,7 +43,7 @@ Riskklassa först testreglerna som low enligt avsnittet Riskbaserade godkännand
 | LAB-FLOW-003 | Linux och DBA i valfri ordning |
 | LAB-FLOW-004 | DBA |
 
-Testa 003 med separata Windows-, Linux- och DBA-konton. Windows ser ingen regel i denna kö när Windows endast äger källan. Linux skickar in och godkänner. Status är då pending. Efter DBA:s godkännande blir status approved. Vid avslag blir den denied och en ny beställning kan skickas. Ändra därefter en destination eller tjänst och ladda om vyn. En ändrad beställning visas som superseded och kräver nya beslut. Grupp- och ägarändringar upptäcks när vyn öppnas eller ett beslut skickas. Godkännandet sparas i appens egen tabell. Labbet gör inga externa anrop och installerar ingen brandväggspolicy.
+Testa 003 med separata Windows-, Linux- och DBA-konton. Windows ser ingen regel i denna kö när Windows endast äger källan. Linux skickar in och godkänner. Status är då pending. Efter DBA:s godkännande blir status approved. Vid avslag blir den denied och en ny beställning kan skickas. Ändra därefter en destination eller tjänst och ladda om vyn. En ändrad beställning visas som superseded och kräver nya beslut för ändrade granskningsunderlag. Grupp- och ägarändringar upptäcks när vyn öppnas eller ett beslut skickas. Godkännandet sparas i appens egen tabell. Labbet gör inga externa anrop och installerar ingen brandväggspolicy.
 
 ## Simulerade ACI- och NSX-grupper
 
@@ -74,7 +74,7 @@ PLUGINS_CONFIG["destination_approvals"]["risk_groups"] = {
 }
 ```
 
-Low kräver enbart destinationsgodkännanden; medium dessutom Network, high Security (inte Network om det inte är destinationsägare). Om samma Django-grupp redan är destinationsgodkännare krävs inte ett extra riskbeslut. Saknad godkännargrupp blockerar regeln. Godkännanden sker parallellt i befintliga Mina godkännanden; ingen ny databasmodell krävs.
+Low kräver enbart destinationsgodkännanden; medium dessutom Network, high Security (inte Network om det inte är destinationsägare). Från 0.3.0 krävs ett separat riskbeslut även om samma Django-grupp är destinationsgodkännare. Saknad godkännargrupp blockerar regeln. Godkännanden sker parallellt i befintliga Mina godkännanden; ingen ny databasmodell krävs.
 
 Ge Network Approvers respektive Security Approvers separata Object Permissions med Object Type Policy Rule, Action view och respektive constraint:
 
@@ -97,7 +97,7 @@ curl --fail-with-body -X PATCH "$RULE_URL" \
   -d '{"custom_fields":{"risk_level":"medium"}}'
 ```
 
-Skicka regeln för godkännande i befintliga vyn. Ändrad riskklass ändrar snapshoten och tidigare beslut gäller inte den nya versionen. Avslag blockerar tills en ny beställning skickas. Som tidigare är jämförelsen snapshotbaserad: ändring och återställning utan registrerad mellanversion upptäcks inte som en egen revision. Självgodkännande är fortfarande tillåtet för behöriga gruppmedlemmar enligt tidigare labbpolicy.
+Skicka regeln för godkännande i befintliga vyn. Ändrad riskklass ändrar snapshoten; oförändrade destinationsgodkännanden kan återanvändas enligt delta-flödet nedan. Avslag blockerar tills en ny beställning skickas. Som tidigare är jämförelsen snapshotbaserad: ändring och återställning utan registrerad mellanversion upptäcks inte som en egen revision. Självgodkännande är fortfarande tillåtet för behöriga gruppmedlemmar enligt tidigare labbpolicy.
 
 ### Deployment gate för AAP
 
@@ -116,8 +116,24 @@ AAP ska stoppa om HTTP-anropet misslyckas, deployment_ready inte är exakt true 
 1. LAB-FLOW-001 low: endast Linux.
 2. LAB-FLOW-002 medium: Linux + Network; Network ser regeln trots att det inte äger destinationen. Bara Linux godkänner: deployment_ready=false; Network godkänner: true.
 3. LAB-FLOW-003 high: Linux + DBA + Security. Network utan destinationsägarskap får inte se eller godkänna. Testa direktlänk och manipulerad teamnyckel i POST.
-4. Ändra 002 från medium till high: gate false, tidigare snapshot superseded; skicka på nytt, kräv Linux + Security.
+4. Ändra 002 från medium till high: gate false, tidigare snapshot superseded; skicka på nytt, Linux återanvänds om redan godkänt och Security behöver besluta.
 5. Saknad grupp eller risk: gate false. Token utan View får 404 (eller nekad autentisering).
 6. Avslag blockerar. Endast ändrade regler behöver nya beslut efter initial backfill.
 
 Kör enhetstester i installerad Nautobot-miljö med `nautobot-server test destination_approvals.tests` (kontrollera testdatabas/inställningar). Verifiera GUI/API och Object Permissions i labbet innan deployment.
+
+## Inkrementella godkännanden (0.3.0)
+
+Varje godkännande jämför sitt eget underlag med närmast föregående inskickade version av samma regel:
+
+- Destinationsteam: egen destinationsmängd (inklusive ägare, adress och gruppreferenser), källa, tjänster, action, loggning, status, beställnings-ID och egen godkännargrupp. Riskklass och andra teams destinationsmängd påverkar inte detta beslut.
+- Riskansvar: hela trafikflödet, riskklass, samma gemensamma fält och egen godkännargrupp. Ändrad trafik eller riskklass kräver nytt riskbeslut. Risk- och destinationsbeslut är separata även om samma grupp har båda rollerna.
+- Regelns visningsnamn kräver inget nytt beslut på egen hand. Nytt beställnings-ID kräver däremot nya beslut.
+
+Ändra regeln via ordinarie API som tidigare och öppna Mina godkännanden. Ändrade regler visas som Ändrad. Giltiga tidigare beslut visas med ursprungligt namn/tid och gransknings-ID. Vid inskick skapas en ny Review med aktuell helhetssnapshot och kopierade positiva beslut från närmast föregående Review. Avslag kopieras inte. Tidigare Review och dess beslutshistorik skrivs inte över (dess state kan markeras superseded). Om alla beslut fortfarande är giltiga blir den nya versionen direkt approved utan manuell omgranskning. Annars väntar bara kvarstående beslut. Ändringar i ett annat teams destinationer kräver inte att redan godkända team gör om sina beslut. UI visar vilka granskningsfält som ändrats; hela regelns nuvarande trafik visas också som tidigare.
+
+AAP:s befintliga gate returnerar false för ändrad helhetssnapshot tills den aktuella versionen skickats in och alla krav är uppfyllda. API:t exponerar dessutom pending_approvals och retained_approvals. En tom pending_approvals-lista ersätter inte deployment_ready (t.ex. kan den aktuella snapshoten ännu vara oskickad). AAP måste fortfarande stoppa om deployment_ready inte är exakt true.
+
+Tidigare 0.2.0-godkännanden återanvänds om deras befintliga snapshot har tillräckliga fält och underlaget är oförändrat. Om en riskgrupp tidigare deduplicerats mot destinationsteamet krävs ett separat riskbeslut en första gång. Ingen databasändring eller ny permission krävs. Ingen automatisk risknedklassningskontroll införs; betrodd API-skrivare krävs fortsatt. Snapshotjämförelse upptäcker inte mellanliggande ändringar som aldrig skickats in och sedan återställts. Ingen historisk sökning efter äldre matchande beslut görs. Externa gruppers verkliga medlemskap ligger fortfarande utanför snapshoten.
+
+Testa särskilt LAB-FLOW-003 medium -> high efter att alla godkänt: Linux och DBA kvarstår, Security väntar, Network tas bort. Lägg därefter till en Linux-destination: DBA kvarstår, Linux och Security behöver besluta. Ändra tjänst: alla aktuella team behöver besluta. Kontrollera stale POST, direktlänkar och AAP-gate. Enhetstester i destination_approvals/tests/test_delta.py.
