@@ -14,6 +14,7 @@ from .models import Review
 from .routing import snapshot
 from .risk import risk_visibility
 from .status import current_state
+from .delta import all_approved, carry_approvals, changed_fields, decisions_for
 
 
 def visible(user):
@@ -39,14 +40,23 @@ def context_for(rule, groups):
         return None
     review = Review.objects.filter(rule_id=rule.pk).first()
     state = current_state(review, data)
-    decisions = review.decisions if review and review.snapshot == data else {}
-    waiting = state == "pending" and any(team not in decisions for team in mine)
+    decisions = decisions_for(review, data)
+    missing = [team for team in mine if decisions.get(team, {}).get("action") != "approve"]
+    waiting = state == "pending" and bool(missing)
+    # Compare against the previous submitted version even after resubmission.
+    baseline = review
+    if review and state != "superseded":
+        baseline = Review.objects.filter(rule_id=rule.pk, pk__lt=review.pk).first()
+    baseline_data = baseline.snapshot if baseline else None
     labels = {"draft": "Utkast", "pending": "Väntar på andra", "denied": "Avslagen",
               "approved": "Godkänd", "superseded": "Ändrad"}
+    label = "Ditt beslut behövs" if waiting else labels[state]
+    if state == "superseded":
+        label = "Ändrad – nytt beslut efter inskick" if missing else "Ändrad – dina beslut kvarstår"
     return {"rule": rule, "data": data, "mine": mine, "review": review, "state": state,
-            "waiting": waiting, "label": "Ditt beslut behövs" if waiting else labels[state],
-            "rows": [(team, decisions.get(team), state == "pending" and team in mine and team not in decisions)
-                     for team in data["approvers"]],
+            "waiting": waiting, "label": label,
+            "rows": [(team, decisions.get(team), state == "pending" and team in mine and team not in decisions,
+                      changed_fields(baseline_data, data, team)) for team in data["approvers"]],
             "can_submit": state in ("draft", "denied", "superseded")}
 
 
@@ -84,7 +94,12 @@ def detail(request, pk):
             action = request.POST.get("action")
             if action == "submit":
                 if current is None or current.state in ("denied", "superseded"):
-                    Review.objects.create(rule_id=pk, snapshot=data, submitted_by=request.user.get_username())
+                    carried = carry_approvals(current, data)
+                    Review.objects.create(
+                        rule_id=pk, snapshot=data, decisions=carried,
+                        state="approved" if all_approved(data, carried) else "pending",
+                        submitted_by=request.user.get_username(),
+                    )
             elif action in ("approve", "deny"):
                 team = request.POST.get("team")
                 if team not in data["approvers"] or data["approvers"][team] not in groups:
@@ -97,8 +112,7 @@ def detail(request, pk):
                                                "user_id": str(request.user.pk), "at": timezone.now().isoformat()}
                     if action == "deny":
                         current.state = "denied"
-                    elif all(current.decisions.get(key, {}).get("action") == "approve"
-                             for key in data["approvers"]):
+                    elif all_approved(data, current.decisions):
                         current.state = "approved"
                     current.save(update_fields=["decisions", "state"])
         return redirect("plugins:destination_approvals:detail", pk=pk)

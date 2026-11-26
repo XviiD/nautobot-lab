@@ -28,8 +28,9 @@ def add_risk_approver(approvers, level, group_model):
     if group is None:
         raise ValidationError(f"Godkännargrupp saknas för riskklass {level}.")
     gid = str(group.pk)
-    if gid not in approvers.values():
-        approvers[f"risk:{level}"] = gid
+    # Destination ownership and risk are separate approval scopes, even if
+    # the same group is responsible for both.
+    approvers[f"risk:{level}"] = gid
 
 
 def risk_visibility(group_names):

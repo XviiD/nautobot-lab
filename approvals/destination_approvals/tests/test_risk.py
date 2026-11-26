@@ -40,7 +40,7 @@ class RiskTests(TestCase):
     def test_same_destination_group(self):
         approvers = {"network-team": "risk-id"}
         add_risk_approver(approvers, "medium", self.groups)
-        self.assertEqual(approvers, {"network-team": "risk-id"})
+        self.assertEqual(approvers, {"network-team": "risk-id", "risk:medium": "risk-id"})
 
     def test_missing_group_blocks(self):
         self.groups.objects.filter.return_value.first.return_value = None
