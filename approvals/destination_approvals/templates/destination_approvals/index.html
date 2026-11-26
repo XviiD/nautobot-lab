@@ -4,10 +4,10 @@
 <h1>Mina godkännanden</h1>
 {% if rows %}
 <div class="da-scroll"><table class="table da-table">
-<thead><tr><th>Regel</th><th>Ditt destinationsteam</th><th>Status</th></tr></thead>
+<thead><tr><th>Regel</th><th>Riskklass</th><th>Dina godkännanden</th><th>Status</th></tr></thead>
 <tbody>{% for row in rows %}<tr>
 <td><small>{{ row.rule.request_id }}</small><a href="{% url 'plugins:destination_approvals:detail' row.rule.pk %}">{{ row.rule.name }}</a></td>
-<td>{{ row.mine|join:", " }}</td><td><span class="da-state {% if row.waiting %}da-due{% else %}da-{{ row.state }}{% endif %}">{{ row.label }}</span></td>
+<td>{{ row.data.risk_level|upper }}</td><td>{{ row.mine|join:", " }}</td><td><span class="da-state {% if row.waiting %}da-due{% else %}da-{{ row.state }}{% endif %}">{{ row.label }}</span></td>
 </tr>{% endfor %}</tbody></table></div>
-{% else %}<p class="da-box">Du har inga labbregler att granska för dina destinationsteam.</p>{% endif %}
+{% else %}<p class="da-box">Du har inga labbregler att granska för dina destinations- eller riskteam.</p>{% endif %}
 {% endblock %}

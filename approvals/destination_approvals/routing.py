@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
+from .risk import add_risk_approver, risk_level
+
 
 def address_record(obj):
     if obj.ip_address_id:
@@ -31,6 +33,7 @@ def snapshot(rule):
 
     result = {"name": rule.name, "request": rule.request_id, "action": rule.action,
               "log": rule.log, "status": str(rule.status_id)}
+    result["risk_level"] = risk_level(rule)
     teams = set()
     for side in ("source", "destination"):
         rows = []
@@ -71,6 +74,7 @@ def snapshot(rule):
         if not group:
             raise ValidationError(f"Godkännargrupp saknas för {team}.")
         result["approvers"][team] = str(group.pk)
+    add_risk_approver(result["approvers"], result["risk_level"], group_model)
     result["services"] = [
         {"id": str(s.pk), "name": s.name, "protocol": str(s.ip_protocol), "port": str(s.port)}
         for s in rule.destination_services.order_by("pk")

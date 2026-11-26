@@ -12,6 +12,8 @@ from nautobot_firewall_models.models import PolicyRule
 
 from .models import Review
 from .routing import snapshot
+from .risk import risk_visibility
+from .status import current_state
 
 
 def visible(user):
@@ -21,7 +23,8 @@ def visible(user):
     return PolicyRule.objects.restrict(user, "view").filter(
         Q(destination_addresses__tags__name__in=tags)
         | Q(destination_address_groups__address_objects__tags__name__in=tags)
-        | Q(destination_address_groups__tags__name__in=tags, destination_address_groups__address_objects__isnull=True),
+        | Q(destination_address_groups__tags__name__in=tags, destination_address_groups__address_objects__isnull=True)
+        | risk_visibility(group_names),
         request_id__startswith="LAB-FLOW-",
     ).distinct()
 
@@ -35,7 +38,7 @@ def context_for(rule, groups):
     if not mine:
         return None
     review = Review.objects.filter(rule_id=rule.pk).first()
-    state = review.state if review and review.snapshot == data else ("superseded" if review else "draft")
+    state = current_state(review, data)
     decisions = review.decisions if review and review.snapshot == data else {}
     waiting = state == "pending" and any(team not in decisions for team in mine)
     labels = {"draft": "Utkast", "pending": "Väntar på andra", "denied": "Avslagen",
@@ -67,13 +70,15 @@ def detail(request, pk):
     if request.method == "POST":
         with transaction.atomic():
             # Serialize submissions and decisions for this rule, including the first submission.
-            rule = PolicyRule.objects.select_for_update().get(pk=rule.pk)
+            rule = get_object_or_404(PolicyRule.objects.select_for_update(), pk=rule.pk)
+            if not visible(request.user).filter(pk=rule.pk).exists():
+                raise Http404
             context = context_for(rule, groups)
             if not context:
                 raise Http404
             current = context["review"]
             data = context["data"]
-            if current and current.snapshot != data and current.state != "superseded":
+            if current and context["state"] == "superseded" and current.state != "superseded":
                 current.state = "superseded"
                 current.save(update_fields=["state"])
             action = request.POST.get("action")
@@ -92,7 +97,8 @@ def detail(request, pk):
                                                "user_id": str(request.user.pk), "at": timezone.now().isoformat()}
                     if action == "deny":
                         current.state = "denied"
-                    elif current.decisions.keys() == data["approvers"].keys():
+                    elif all(current.decisions.get(key, {}).get("action") == "approve"
+                             for key in data["approvers"]):
                         current.state = "approved"
                     current.save(update_fields=["decisions", "state"])
         return redirect("plugins:destination_approvals:detail", pk=pk)
