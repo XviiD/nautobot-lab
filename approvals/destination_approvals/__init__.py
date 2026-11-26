@@ -4,7 +4,7 @@ from nautobot.apps import NautobotAppConfig
 class DestinationApprovalsConfig(NautobotAppConfig):
     name = "destination_approvals"
     verbose_name = "Destination Approvals"
-    version = "0.3.0"
+    version = "0.4.0"
     base_url = "destination-approvals"
     default_auto_field = "django.db.models.BigAutoField"
     home_view_name = "plugins:destination_approvals:index"
