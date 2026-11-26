@@ -137,3 +137,32 @@ AAP:s befintliga gate returnerar false för ändrad helhetssnapshot tills den ak
 Tidigare 0.2.0-godkännanden återanvänds om deras befintliga snapshot har tillräckliga fält och underlaget är oförändrat. Om en riskgrupp tidigare deduplicerats mot destinationsteamet krävs ett separat riskbeslut en första gång. Ingen databasändring eller ny permission krävs. Ingen automatisk risknedklassningskontroll införs; betrodd API-skrivare krävs fortsatt. Snapshotjämförelse upptäcker inte mellanliggande ändringar som aldrig skickats in och sedan återställts. Ingen historisk sökning efter äldre matchande beslut görs. Externa gruppers verkliga medlemskap ligger fortfarande utanför snapshoten.
 
 Testa särskilt LAB-FLOW-003 medium -> high efter att alla godkänt: Linux och DBA kvarstår, Security väntar, Network tas bort. Lägg därefter till en Linux-destination: DBA kvarstår, Linux och Security behöver besluta. Ändra tjänst: alla aktuella team behöver besluta. Kontrollera stale POST, direktlänkar och AAP-gate. Enhetstester i destination_approvals/tests/test_delta.py.
+
+
+## Approval REST API (0.4.0)
+
+GUI och API använder samma workflow.py med transaktionslås på PolicyRule, View-kontroll, aktuell gruppmedlemskapskontroll och aktuell snapshot. Inga nya modeller eller migrationer. Alla operationer gäller fortfarande LAB-FLOW-regler.
+
+Bas-URL: `$NAUTOBOT_URL/api/plugins/destination-approvals/rules/$RULE_ID`.
+
+1. GET approval-status/ med användarens token. Befintlig AAP-gate är oförändrad (review_id är fortfarande endast satt när approved). active_review_id är senaste review oavsett state. my_pending_approvals visar beslutsnycklar för inloggad användare, endast när pending. can_submit visar om användarens grupp får skicka in aktuell version (token måste dessutom ha Write enabled för POST). Aktuella godkännare får även current_snapshot, snapshot_hash, decisions, changed_fields och my_approval_scopes. Läs snapshoten i portalen innan beslut.
+2. POST submit/ med expected_review_id (null första gången, annars senaste active_review_id) och snapshot_hash från GET. Behörighet: samma som GUI, minst ett aktuellt godkännandeansvar. Kvarvarande beslut ärvs via delta-flödet.
+3. POST decision/ med review_id (active_review_id från GET), team (exakt nyckel från my_pending_approvals), action (approve eller deny) och valfri comment (max 2000 tecken). Användaridentitet och tid sätts på servern. Godkännande per scope, inte per hela regel.
+
+```bash
+BASE="$NAUTOBOT_URL/api/plugins/destination-approvals/rules/$RULE_ID"
+curl --fail-with-body -sS "$BASE/approval-status/" -H "Authorization: Token $USER_TOKEN"
+# Exempel: ersätt ID och hash med värden från GET som användaren granskat.
+curl --fail-with-body -sS -X POST "$BASE/submit/" \
+  -H "Authorization: Token $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"expected_review_id":null,"snapshot_hash":"<64 hextecken från GET>"}'
+curl --fail-with-body -sS -X POST "$BASE/decision/" \
+  -H "Authorization: Token $USER_TOKEN" -H "Content-Type: application/json" \
+  -d '{"review_id":42,"team":"risk:high","action":"approve","comment":"Granskat enligt säkerhetspolicy"}'
+```
+
+POST returnerar aktuell approval-status och processed_review_id. 400 vid ogiltig payload/riskklass, 403 vid saknad grupp eller skrivaktiverad token, 404 vid saknad View/regeln finns ej, 409 vid inaktuell snapshot/review, upprepat beslut eller redan inskickad version. Oautentiserade anrop nekas (401 eller 403 beroende på autentiseringsklass). Vid 409: läs om, visa aktuellt underlag och begär nytt mänskligt beslut om så krävs; återspela inte gamla beslut automatiskt. AAP ska fortsatt använda endast deployment_ready och approved_snapshot.
+
+Token tillhör användaren som faktiskt godkänner. Write enabled krävs för POST, men användaren behöver inte Change på PolicyRule eller direkt skrivbehörighet på Review. Lämna AAP-token read-only. Skicka aldrig en användares token till klientloggar eller lagra den i webbläsarens localStorage; använd TLS och skyddad portal-backend. Ingen impersonation via payload eller generisk service-token som kan godkänna för alla team. Om portalen använder SSO utan användarspecifika Nautobot-identiteter behövs separat betrodd identitetsintegration; denna version implementerar inte delegerad OAuth/token exchange. Befintlig möjlighet till självgodkännande, snapshotbegränsningar och riskklassningsskydd är oförändrade.
+
+Testa GUI/API-korsning: skicka via API, godkänn Linux i GUI, godkänn risk via API. Testa read-only-token, fel grupp, fel review_id, ändrad regel före beslut, dubbla POST, avslag, oförändrade delgodkännanden och AAP-gate. Enhetstester i tests/test_workflow.py, kör i labbet innan produktionssättning.

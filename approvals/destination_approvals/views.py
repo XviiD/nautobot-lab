@@ -3,10 +3,8 @@ from django.db.models import Q
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from nautobot_firewall_models.models import PolicyRule
 
@@ -14,7 +12,8 @@ from .models import Review
 from .routing import snapshot
 from .risk import risk_visibility
 from .status import current_state
-from .delta import all_approved, carry_approvals, changed_fields, decisions_for
+from .delta import changed_fields, decisions_for
+from .workflow import Conflict, decide, fingerprint, submit
 
 
 def visible(user):
@@ -57,6 +56,7 @@ def context_for(rule, groups):
             "waiting": waiting, "label": label,
             "rows": [(team, decisions.get(team), state == "pending" and team in mine and team not in decisions,
                       changed_fields(baseline_data, data, team)) for team in data["approvers"]],
+            "snapshot_hash": fingerprint(data),
             "can_submit": state in ("draft", "denied", "superseded")}
 
 
@@ -78,43 +78,19 @@ def detail(request, pk):
     rule = get_object_or_404(visible(request.user), pk=pk)
     groups = {str(g) for g in request.user.groups.values_list("pk", flat=True)}
     if request.method == "POST":
-        with transaction.atomic():
-            # Serialize submissions and decisions for this rule, including the first submission.
-            rule = get_object_or_404(PolicyRule.objects.select_for_update(), pk=rule.pk)
-            if not visible(request.user).filter(pk=rule.pk).exists():
-                raise Http404
-            context = context_for(rule, groups)
-            if not context:
-                raise Http404
-            current = context["review"]
-            data = context["data"]
-            if current and context["state"] == "superseded" and current.state != "superseded":
-                current.state = "superseded"
-                current.save(update_fields=["state"])
-            action = request.POST.get("action")
+        action = request.POST.get("action")
+        try:
             if action == "submit":
-                if current is None or current.state in ("denied", "superseded"):
-                    carried = carry_approvals(current, data)
-                    Review.objects.create(
-                        rule_id=pk, snapshot=data, decisions=carried,
-                        state="approved" if all_approved(data, carried) else "pending",
-                        submitted_by=request.user.get_username(),
-                    )
+                raw_id = request.POST.get("review", "")
+                submit(request.user, pk, int(raw_id) if raw_id else None,
+                       request.POST.get("snapshot_hash", ""))
             elif action in ("approve", "deny"):
-                team = request.POST.get("team")
-                if team not in data["approvers"] or data["approvers"][team] not in groups:
-                    raise PermissionDenied
-                if (not current or current.state != "pending" or str(current.pk) != request.POST.get("review")
-                        or team in current.decisions):
-                    messages.error(request, "Beslutet gäller en tidigare eller redan hanterad beställning.")
-                else:
-                    current.decisions[team] = {"action": action, "by": request.user.get_username(),
-                                               "user_id": str(request.user.pk), "at": timezone.now().isoformat()}
-                    if action == "deny":
-                        current.state = "denied"
-                    elif all_approved(data, current.decisions):
-                        current.state = "approved"
-                    current.save(update_fields=["decisions", "state"])
+                decide(request.user, pk, int(request.POST.get("review", "")),
+                       request.POST.get("team"), action, channel="gui")
+            else:
+                raise ValidationError("Ogiltig åtgärd.")
+        except (Conflict, ValidationError, ValueError) as exc:
+            messages.error(request, str(exc))
         return redirect("plugins:destination_approvals:detail", pk=pk)
 
     context = context_for(rule, groups)
